@@ -191,6 +191,23 @@ export default function Dashboard() {
     setUploadedFiles(prev => prev.map(f => ({ ...f, selected: select })));
   };
 
+  const callGeminiApi = async (params: any) => {
+    const response = await fetch('/api/extract', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Falha na comunicação com a API.');
+    }
+
+    return await response.json();
+  };
+
   const handlePreAnalyze = async () => {
     const selectedFiles = uploadedFiles.filter(f => f.selected);
     if (selectedFiles.length === 0) {
@@ -258,9 +275,9 @@ Retorne um JSON estrito com:
 
       parts.push({ text: prompt });
 
-      const response = await ai.models.generateContent({
+      const responseData = await callGeminiApi({
         model: 'gemini-3.1-pro-preview',
-        contents: { parts },
+        contents: [{ parts }],
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -284,7 +301,7 @@ Retorne um JSON estrito com:
         }
       });
 
-      const jsonStr = response.text?.trim();
+      const jsonStr = responseData.text?.trim();
       if (jsonStr) {
         const data: PreAnalysisData = JSON.parse(jsonStr);
         
@@ -485,9 +502,9 @@ ${mappingInstructions}
           };
         }
 
-        const response = await ai.models.generateContent({
+        const responseData = await callGeminiApi({
           model: 'gemini-3.1-pro-preview',
-          contents: { parts },
+          contents: [{ parts }],
           config: {
             responseMimeType: 'application/json',
             responseSchema: {
@@ -501,7 +518,7 @@ ${mappingInstructions}
           }
         });
 
-        const jsonStr = response.text?.trim();
+        const jsonStr = responseData.text?.trim();
         if (jsonStr) {
           const data: TimecardData[] = JSON.parse(jsonStr);
           

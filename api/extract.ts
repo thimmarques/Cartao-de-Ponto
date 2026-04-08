@@ -1,11 +1,11 @@
-import { GoogleGenerativeAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const config = {
   maxDuration: 300,
 };
 
 // Initialize with the correct options object
-const genAI = new GoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {

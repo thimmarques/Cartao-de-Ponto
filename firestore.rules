@@ -1,0 +1,106 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - createdAt: string (required)
+    //
+    // Collection: users/{userId}/timecards
+    // Document ID: {timecardId}
+    // Fields:
+    //   - uid: string (required)
+    //   - employeeName: string (required)
+    //   - employeeId: string (optional)
+    //   - period: string (optional)
+    //   - totalHours: string (optional)
+    //   - entries: list (optional)
+    //   - payslip: map (optional)
+    //   - createdAt: string (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+    
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+    
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.createdAt is string && isValidDateString(data.createdAt) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 2048));
+    }
+
+    function isValidTimecard(data) {
+      return data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.employeeName is string && data.employeeName.size() > 0 && data.employeeName.size() < 200 &&
+             (!('employeeId' in data) || (data.employeeId is string && data.employeeId.size() < 100)) &&
+             data.createdAt is string && isValidDateString(data.createdAt) &&
+             (!('period' in data) || (data.period is string && data.period.size() < 100)) &&
+             (!('totalHours' in data) || (data.totalHours is string && data.totalHours.size() < 100)) &&
+             (!('entries' in data) || (data.entries is list && data.entries.size() <= 1000)) &&
+             (!('payslip' in data) || data.payslip is map);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && hasRequiredFields(['uid', 'email', 'createdAt']) && isValidUser(request.resource.data) && uidUnchanged();
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && uidNotModified() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(userId);
+      
+      match /timecards/{timecardId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && hasRequiredFields(['uid', 'employeeName', 'createdAt']) && isValidTimecard(request.resource.data) && uidUnchanged();
+        allow update: if isOwner(userId) && isValidTimecard(request.resource.data) && uidNotModified() && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

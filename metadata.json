@@ -1,0 +1,5 @@
+{
+  "name": "Timecard Extractor AI",
+  "description": "Extracts information from employee timecards using AI, with support for custom formatting templates via Excel or PDF uploads.",
+  "requestFramePermissions": []
+}

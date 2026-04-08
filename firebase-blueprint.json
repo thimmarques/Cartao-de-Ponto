@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Timecard": {
+      "title": "Timecard",
+      "description": "Extracted timecard data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "period": { "type": "string" },
+        "totalHours": { "type": "string" },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string" },
+              "clockIn1": { "type": "string" },
+              "clockOut1": { "type": "string" },
+              "clockIn2": { "type": "string" },
+              "clockOut2": { "type": "string" },
+              "hours": { "type": "string" }
+            }
+          }
+        },
+        "payslip": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "employeeName", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/users/{userId}/timecards/{timecardId}": {
+      "schema": "Timecard",
+      "description": "User's extracted timecards"
+    }
+  }
+}

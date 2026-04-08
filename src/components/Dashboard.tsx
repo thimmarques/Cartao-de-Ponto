@@ -4,12 +4,12 @@ import { Upload, FileText, FileSpreadsheet, Loader2, Save, CheckCircle2, AlertCi
 import { useAuth } from './AuthContext';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import * as XLSX from 'xlsx';
 import Tesseract from 'tesseract.js';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 interface TimecardEntry {
   date: string;
@@ -281,16 +281,16 @@ Retorne um JSON estrito com:
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: {
-              timeColumns: { type: Type.ARRAY, items: { type: Type.STRING } },
+              timeColumns: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
               payslipMappings: { 
-                type: Type.ARRAY, 
+                type: SchemaType.ARRAY, 
                 items: { 
-                  type: Type.OBJECT, 
+                  type: SchemaType.OBJECT, 
                   properties: {
-                    targetName: { type: Type.STRING },
-                    sourceName: { type: Type.STRING }
+                    targetName: { type: SchemaType.STRING },
+                    sourceName: { type: SchemaType.STRING }
                   },
                   required: ["targetName", "sourceName"]
                 } 
@@ -459,45 +459,45 @@ ${mappingInstructions}
 
         // Define dynamic schema based on selections
         const entryProperties: Record<string, any> = {
-          date: { type: Type.STRING, description: "Data no formato DD/MM/YYYY ddd" },
-          hours: { type: Type.STRING, description: "Horas trabalhadas no dia (com vírgula)" }
+          date: { type: SchemaType.STRING, description: "Data no formato DD/MM/YYYY ddd" },
+          hours: { type: SchemaType.STRING, description: "Horas trabalhadas no dia (com vírgula)" }
         };
         
         if (extractionType === 'timecard' || extractionType === 'both') {
           selectedTimeColumns.forEach(col => {
-            entryProperties[col] = { type: Type.STRING, description: `Valor para a coluna ${col}` };
+            entryProperties[col] = { type: SchemaType.STRING, description: `Valor para a coluna ${col}` };
           });
         }
 
         const timecardProperties: Record<string, any> = {
-          employeeName: { type: Type.STRING, description: "Nome do funcionário" },
-          employeeId: { type: Type.STRING, description: "Matrícula do funcionário, se houver" },
-          period: { type: Type.STRING, description: "Período de apuração ou mês/ano" },
-          totalHours: { type: Type.STRING, description: "Total de horas trabalhadas no período (com vírgula)" },
+          employeeName: { type: SchemaType.STRING, description: "Nome do funcionário" },
+          employeeId: { type: SchemaType.STRING, description: "Matrícula do funcionário, se houver" },
+          period: { type: SchemaType.STRING, description: "Período de apuração ou mês/ano" },
+          totalHours: { type: SchemaType.STRING, description: "Total de horas trabalhadas no período (com vírgula)" },
         };
 
         if (extractionType === 'timecard' || extractionType === 'both') {
           timecardProperties.entries = {
-            type: Type.ARRAY,
+            type: SchemaType.ARRAY,
             items: {
-              type: Type.OBJECT,
+              type: SchemaType.OBJECT,
               properties: entryProperties,
               required: ["date", "hours", ...selectedTimeColumns]
             }
           };
         } else {
-          timecardProperties.entries = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {} } }; // Empty if not requested
+          timecardProperties.entries = { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } }; // Empty if not requested
         }
 
         if (extractionType === 'payslip' || extractionType === 'both') {
           const payslipProps: Record<string, any> = {};
           fieldMappings.forEach(m => {
             if (m.targetName.trim() !== '') {
-              payslipProps[m.targetName] = { type: Type.STRING, description: `Valor extraído de ${m.sourceName || m.targetName}` };
+              payslipProps[m.targetName] = { type: SchemaType.STRING, description: `Valor extraído de ${m.sourceName || m.targetName}` };
             }
           });
           timecardProperties.payslip = {
-            type: Type.OBJECT,
+            type: SchemaType.OBJECT,
             properties: payslipProps
           };
         }
@@ -508,9 +508,9 @@ ${mappingInstructions}
           config: {
             responseMimeType: 'application/json',
             responseSchema: {
-              type: Type.ARRAY,
+              type: SchemaType.ARRAY,
               items: {
-                type: Type.OBJECT,
+                type: SchemaType.OBJECT,
                 properties: timecardProperties,
                 required: ["employeeName", "period"]
               }

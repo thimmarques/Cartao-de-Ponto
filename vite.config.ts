@@ -40,7 +40,7 @@ export default defineConfig(({mode}) => {
           manualChunks: {
             'react-vendor': ['react', 'react-dom'],
             'firebase-vendor': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
-            'ai-vendor': ['@google/genai'],
+            'ai-vendor': ['@google/generative-ai'],
             'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-tabs', 'lucide-react', 'motion'],
             'charts-vendor': ['recharts'],
             'utils-vendor': ['xlsx', 'tesseract.js'],

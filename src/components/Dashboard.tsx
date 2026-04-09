@@ -11,6 +11,93 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+const generateContentWithRetry = async (params: any, maxRetries = 3) => {
+  let retries = 0;
+  while (retries < maxRetries) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (error: any) {
+      if (error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+        retries++;
+        if (retries >= maxRetries) throw error;
+        const delay = Math.pow(2, retries) * 2000 + Math.random() * 1000;
+        console.warn(`Rate limit hit. Retrying in ${Math.round(delay / 1000)}s... (Attempt ${retries} of ${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error;
+      }
+    }
+  }
+};
+
+/**
+ * Tries to repair a truncated JSON string by closing open brackets and braces.
+ */
+const repairJson = (json: string): string => {
+  let repaired = json.trim();
+  
+  // If it doesn't start with [ or {, it's likely not JSON or very broken
+  if (!repaired.startsWith('[') && !repaired.startsWith('{')) {
+    return repaired;
+  }
+
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < repaired.length; i++) {
+    const char = repaired[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '{' || char === '[') {
+        stack.push(char);
+      } else if (char === '}' || char === ']') {
+        stack.pop();
+      }
+    }
+  }
+
+  // If we are inside a string, close it
+  if (inString) {
+    repaired += '"';
+  }
+
+  // Close open objects and arrays in reverse order
+  while (stack.length > 0) {
+    const last = stack.pop();
+    if (last === '{') repaired += '}';
+    else if (last === '[') repaired += ']';
+  }
+
+  return repaired;
+};
+
+const safeJsonParse = (jsonStr: string): any => {
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.warn("Initial JSON parse failed, attempting repair...", e);
+    try {
+      const repaired = repairJson(jsonStr);
+      return JSON.parse(repaired);
+    } catch (e2) {
+      console.error("JSON repair failed", e2);
+      throw new Error("A resposta da IA foi interrompida ou está malformada. Tente processar menos arquivos por vez.");
+    }
+  }
+};
+
 interface TimecardEntry {
   date: string;
   [key: string]: string; // Dynamic time columns
@@ -258,10 +345,11 @@ Retorne um JSON estrito com:
 
       parts.push({ text: prompt });
 
-      const response = await ai.models.generateContent({
+      const response = await generateContentWithRetry({
         model: 'gemini-3.1-pro-preview',
         contents: { parts },
         config: {
+          maxOutputTokens: 8192,
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -286,7 +374,7 @@ Retorne um JSON estrito com:
 
       const jsonStr = response.text?.trim();
       if (jsonStr) {
-        const data: PreAnalysisData = JSON.parse(jsonStr);
+        const data: PreAnalysisData = safeJsonParse(jsonStr);
         
         // Make column names unique to prevent React key errors and JSON schema overwrites
         const makeUnique = (arr: string[]) => {
@@ -485,10 +573,11 @@ ${mappingInstructions}
           };
         }
 
-        const response = await ai.models.generateContent({
+        const response = await generateContentWithRetry({
           model: 'gemini-3.1-pro-preview',
           contents: { parts },
           config: {
+            maxOutputTokens: 8192,
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.ARRAY,
@@ -503,7 +592,7 @@ ${mappingInstructions}
 
         const jsonStr = response.text?.trim();
         if (jsonStr) {
-          const data: TimecardData[] = JSON.parse(jsonStr);
+          const data: TimecardData[] = safeJsonParse(jsonStr);
           
           // Validation and sanitization
           data.forEach(tc => {

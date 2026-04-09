@@ -9,8 +9,6 @@ import * as XLSX from 'xlsx';
 import Tesseract from 'tesseract.js';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
-const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
 interface TimecardEntry {
   date: string;
   [key: string]: string; // Dynamic time columns
@@ -200,9 +198,21 @@ export default function Dashboard() {
       body: JSON.stringify(params),
     });
 
+    const contentType = response.headers.get("content-type");
+    const isJson = contentType && contentType.includes("application/json");
+
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Falha na comunicação com a API.');
+      if (isJson) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Erro na API (${response.status})`);
+      } else {
+        const text = await response.text();
+        throw new Error(text || `Erro na API (${response.status})`);
+      }
+    }
+
+    if (!isJson) {
+      throw new Error("A resposta da API não é um JSON válido.");
     }
 
     return await response.json();

@@ -1,10 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-export const config = {
-  maxDuration: 300,
-};
-
-// Initialize with the correct options object
+// Initialize with the API Key from environment variables
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export default async function handler(req: any, res: any) {
@@ -18,39 +14,34 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { files, extractionType } = req.body;
+    const { model: modelName, contents, config } = req.body;
 
-    // Validate inputs
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      return res.status(400).json({ error: 'Invalid or missing files array' });
+    if (!contents || !Array.isArray(contents)) {
+      return res.status(400).json({ error: 'Invalid or missing contents array' });
     }
 
     // Initialize model with requested configuration
+    // Map model names if necessary (e.g., gemini-3.1-pro-preview might not be valid yet, use 1.5 pro)
+    let actualModelName = modelName || 'gemini-1.5-flash';
+    if (actualModelName.includes('3.1')) {
+        // Fallback to 1.5 pro if 3.1 is not available or is a placeholder
+        actualModelName = 'gemini-1.5-pro';
+    }
+
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash', // Using a stable model
-      generationConfig: {
-        temperature: 0.4,
-        topK: 40,
-        topP: 0.95,
-        maxOutputTokens: 8192,
-      }
+      model: actualModelName,
+      generationConfig: config
     });
 
-    // Process files (simplified example, assuming files contain base64 data and mimeType)
-    const results = await Promise.all(files.map(async (file: any) => {
-      const result = await model.generateContent([
-        `Extract data for ${extractionType}`,
-        {
-          inlineData: {
-            data: file.data,
-            mimeType: file.mimeType
-          }
-        }
-      ]);
-      return result.response.text();
-    }));
+    // Call Gemini API
+    const result = await model.generateContent({
+      contents: contents
+    });
 
-    return res.status(200).json({ results });
+    const response = await result.response;
+    const text = response.text();
+
+    return res.status(200).json({ text });
   } catch (error: any) {
     console.error('API Error:', error);
     return res.status(500).json({ error: error.message || 'Internal Server Error' });

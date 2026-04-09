@@ -4,10 +4,12 @@ import { Upload, FileText, FileSpreadsheet, Loader2, Save, CheckCircle2, AlertCi
 import { useAuth } from './AuthContext';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import Tesseract from 'tesseract.js';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 interface TimecardEntry {
   date: string;
@@ -189,35 +191,6 @@ export default function Dashboard() {
     setUploadedFiles(prev => prev.map(f => ({ ...f, selected: select })));
   };
 
-  const callGeminiApi = async (params: any) => {
-    const response = await fetch('/api/extract', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(params),
-    });
-
-    const contentType = response.headers.get("content-type");
-    const isJson = contentType && contentType.includes("application/json");
-
-    if (!response.ok) {
-      if (isJson) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Erro na API (${response.status})`);
-      } else {
-        const text = await response.text();
-        throw new Error(text || `Erro na API (${response.status})`);
-      }
-    }
-
-    if (!isJson) {
-      throw new Error("A resposta da API não é um JSON válido.");
-    }
-
-    return await response.json();
-  };
-
   const handlePreAnalyze = async () => {
     const selectedFiles = uploadedFiles.filter(f => f.selected);
     if (selectedFiles.length === 0) {
@@ -285,22 +258,22 @@ Retorne um JSON estrito com:
 
       parts.push({ text: prompt });
 
-      const responseData = await callGeminiApi({
+      const response = await ai.models.generateContent({
         model: 'gemini-3.1-pro-preview',
-        contents: [{ parts }],
+        contents: { parts },
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: {
-              timeColumns: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+              timeColumns: { type: Type.ARRAY, items: { type: Type.STRING } },
               payslipMappings: { 
-                type: SchemaType.ARRAY, 
+                type: Type.ARRAY, 
                 items: { 
-                  type: SchemaType.OBJECT, 
+                  type: Type.OBJECT, 
                   properties: {
-                    targetName: { type: SchemaType.STRING },
-                    sourceName: { type: SchemaType.STRING }
+                    targetName: { type: Type.STRING },
+                    sourceName: { type: Type.STRING }
                   },
                   required: ["targetName", "sourceName"]
                 } 
@@ -311,7 +284,7 @@ Retorne um JSON estrito com:
         }
       });
 
-      const jsonStr = responseData.text?.trim();
+      const jsonStr = response.text?.trim();
       if (jsonStr) {
         const data: PreAnalysisData = JSON.parse(jsonStr);
         
@@ -469,58 +442,58 @@ ${mappingInstructions}
 
         // Define dynamic schema based on selections
         const entryProperties: Record<string, any> = {
-          date: { type: SchemaType.STRING, description: "Data no formato DD/MM/YYYY ddd" },
-          hours: { type: SchemaType.STRING, description: "Horas trabalhadas no dia (com vírgula)" }
+          date: { type: Type.STRING, description: "Data no formato DD/MM/YYYY ddd" },
+          hours: { type: Type.STRING, description: "Horas trabalhadas no dia (com vírgula)" }
         };
         
         if (extractionType === 'timecard' || extractionType === 'both') {
           selectedTimeColumns.forEach(col => {
-            entryProperties[col] = { type: SchemaType.STRING, description: `Valor para a coluna ${col}` };
+            entryProperties[col] = { type: Type.STRING, description: `Valor para a coluna ${col}` };
           });
         }
 
         const timecardProperties: Record<string, any> = {
-          employeeName: { type: SchemaType.STRING, description: "Nome do funcionário" },
-          employeeId: { type: SchemaType.STRING, description: "Matrícula do funcionário, se houver" },
-          period: { type: SchemaType.STRING, description: "Período de apuração ou mês/ano" },
-          totalHours: { type: SchemaType.STRING, description: "Total de horas trabalhadas no período (com vírgula)" },
+          employeeName: { type: Type.STRING, description: "Nome do funcionário" },
+          employeeId: { type: Type.STRING, description: "Matrícula do funcionário, se houver" },
+          period: { type: Type.STRING, description: "Período de apuração ou mês/ano" },
+          totalHours: { type: Type.STRING, description: "Total de horas trabalhadas no período (com vírgula)" },
         };
 
         if (extractionType === 'timecard' || extractionType === 'both') {
           timecardProperties.entries = {
-            type: SchemaType.ARRAY,
+            type: Type.ARRAY,
             items: {
-              type: SchemaType.OBJECT,
+              type: Type.OBJECT,
               properties: entryProperties,
               required: ["date", "hours", ...selectedTimeColumns]
             }
           };
         } else {
-          timecardProperties.entries = { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: {} } }; // Empty if not requested
+          timecardProperties.entries = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {} } }; // Empty if not requested
         }
 
         if (extractionType === 'payslip' || extractionType === 'both') {
           const payslipProps: Record<string, any> = {};
           fieldMappings.forEach(m => {
             if (m.targetName.trim() !== '') {
-              payslipProps[m.targetName] = { type: SchemaType.STRING, description: `Valor extraído de ${m.sourceName || m.targetName}` };
+              payslipProps[m.targetName] = { type: Type.STRING, description: `Valor extraído de ${m.sourceName || m.targetName}` };
             }
           });
           timecardProperties.payslip = {
-            type: SchemaType.OBJECT,
+            type: Type.OBJECT,
             properties: payslipProps
           };
         }
 
-        const responseData = await callGeminiApi({
+        const response = await ai.models.generateContent({
           model: 'gemini-3.1-pro-preview',
-          contents: [{ parts }],
+          contents: { parts },
           config: {
             responseMimeType: 'application/json',
             responseSchema: {
-              type: SchemaType.ARRAY,
+              type: Type.ARRAY,
               items: {
-                type: SchemaType.OBJECT,
+                type: Type.OBJECT,
                 properties: timecardProperties,
                 required: ["employeeName", "period"]
               }
@@ -528,7 +501,7 @@ ${mappingInstructions}
           }
         });
 
-        const jsonStr = responseData.text?.trim();
+        const jsonStr = response.text?.trim();
         if (jsonStr) {
           const data: TimecardData[] = JSON.parse(jsonStr);
           
